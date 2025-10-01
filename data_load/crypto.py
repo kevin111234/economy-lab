@@ -6,6 +6,36 @@
             가격, 거래량은 float64, 시간오름차순 정렬, 중복없음
 """
 import pandas as pd
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+KST = ZoneInfo("Asia/Seoul")
+
+# 시간 검증 유틸
+def time_parser(time: str | int): # 입력: YYYY-MM-DD HH:MM 또는 YYYY-MM-DD
+    # 타입 체크
+    if isinstance(time, bool): # bool 타입이면 int로 인식될 수도 있음!
+        raise TypeError("time must not be bool")
+    if isinstance(time, int):
+        if time < 0: # int 타입이지만 음수인 경우
+            raise ValueError(f"timestamp must be >= 0 ms, got {time}")
+        if time < 1_000_000_000_000: # int 타입이지만 초 단위까지 포함한 경우
+            raise ValueError(f"timestamp must be epoch milliseconds, got {time}")
+        return time
+    if not isinstance(time, str): # 타입이 str, int 모두 아닌 경우
+        raise TypeError(f"time must be str or int(ms), got {type(time).__name__}")
+    # 문자열 정리 및 형식 보완
+    t = time.strip()
+    if len(t) == 10: # YYYY-MM-DD인 경우 길이가 10
+        t = t + " 00:00"
+    # KST로 해석, UTC로 변환
+    try:
+        dt = datetime.strptime(t, "%Y-%m-%d %H:%M")
+    except ValueError as e:
+        raise ValueError(f"invalid datetime: {t!r} (expected 'YYYY-MM-DD[ HH:MM]')") from e
+    dt = dt.replace(tzinfo=KST)
+    # 에포크 밀리초로 변환
+    return int(dt.astimezone(timezone.utc).timestamp()*1000)
 
 # 함수 시작
 def crypto_data_loader(
@@ -31,11 +61,8 @@ def crypto_data_loader(
     if interval not in ALLOWED:
         raise ValueError(f"interval must be one of {sorted(ALLOWED)}, got '{interval}'")
       # 시간 검증
-        # 문자열 정리
-        # 형식 보완
-        # KST로 해석
-        # UTC로 변환
-        # 에포크 밀리초로 변환
+    st = time_parser(start_time)
+    et = time_parser(end_time)
       # limit가 1 이상인지
     # 비어있는 데이터프레임 생성
     # request - 아래와 같은 주소 생성(BTC 5m 1000개 로딩)
@@ -47,3 +74,7 @@ def crypto_data_loader(
     # 행 개수와 리미트 비교 검증
     # 반환
     return
+
+# 테스트용 코드
+if __name__ == "__main__":
+    crypto_data_loader("BTCUSDT", "5m", "2024-01-05", " 2025-08-18 16:54", "spot")
