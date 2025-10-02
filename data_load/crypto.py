@@ -8,11 +8,11 @@
 import pandas as pd
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
-
-KST = ZoneInfo("Asia/Seoul")
+import requests, time
 
 # 시간 검증 유틸
 def time_parser(time: str | int): # 입력: YYYY-MM-DD HH:MM 또는 YYYY-MM-DD
+    KST = ZoneInfo("Asia/Seoul")
     # 타입 체크
     if isinstance(time, bool): # bool 타입이면 int로 인식될 수도 있음!
         raise TypeError("time must not be bool")
@@ -60,11 +60,14 @@ def crypto_data_loader(
     ALLOWED = {"1m","3m","5m","15m","30m","1h","2h","4h","6h","8h","12h","1d","3d","1w","1M"}
     if interval not in ALLOWED:
         raise ValueError(f"interval must be one of {sorted(ALLOWED)}, got '{interval}'")
-      # 시간 검증
+    # 시간 검증
     st = time_parser(start_time)
     et = time_parser(end_time)
-      # limit가 1 이상인지
-    # 비어있는 데이터프레임 생성
+    if st > et:
+        raise ValueError(f"start time can't be later then end time. start time:'{start_time}', end time:'{end_time}'")
+    # limit가 1 이상인지
+    if limit is not None and limit < 1:
+        raise ValueError(f"limit can't be less then 1, got '{limit}'")
     # request - 아래와 같은 주소 생성(BTC 5m 1000개 로딩)
     # https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=1000
     # 응답 받기(JSON 형식)
