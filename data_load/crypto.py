@@ -8,7 +8,7 @@
 import pandas as pd
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
-import requests, time
+import requests, time, random
 
 # 시간 검증 유틸
 def time_parser(time: str | int): # 입력: YYYY-MM-DD HH:MM 또는 YYYY-MM-DD
@@ -48,36 +48,55 @@ def get_api_data_binance(base_url: str, path: str, params: dict,
             # 요청 전송
             r = s.get(url, params=params, timeout=timeout)
             # 받은 요청 확인
-            r.raise_for_status()
-            # json 형태로 데이터 받기
-            data = r.json()
-            # 데이터프레임 만들기
-            COLUMNS = [
-                "open_time", "open", "high", "low", "close", "volume",
-                "close_time", "quote_volume", "trades", 
-                "taker_buy_base", "taker_buy_quote", "ignore"
-            ]
-            df = pd.DataFrame(data, columns=COLUMNS)
-            # 필요없는 열 제거
-            df = df.drop(columns=["ignore"])
-            # 데이터 타입 변환
-            NUMERIC_FLOAT = ["open", "high", "low", "close", "volume", "quote_volume", "taker_buy_base", "taker_buy_quote"]
-            df[NUMERIC_FLOAT] = df[NUMERIC_FLOAT].apply(pd.to_numeric, errors = "coerce")
-            df["trades"] = pd.to_numeric(df["trades"], errors="coerce").astype("Int64")
-            # 에포크 밀리초를 타임스템프(UTC)로 변환
-            df["open_time"]  = pd.to_datetime(df["open_time"], unit="ms", utc=True)
-            df["close_time"] = pd.to_datetime(df["close_time"], unit="ms", utc=True)
-            # open_time을 기준으로 정렬
-            df = df.set_index("open_time").sort_index()
-            df = df[~df.index.duplicated(keep="last")]
-            # 결측값 수 파악
-            na_count = df.isna().sum()
-            print(f"결측값 수량: {na_count}개.")
-            # 핵심 열의 결측값 제거
-            df = df.dropna(subset=["open","high","low","close","volume"])
-            # 타임존 변환
-            df.index = df.index.tz_convert("Asia/Seoul")
-            return df
+            # status_code == 429 -> 레이트리밋
+            if r.status_code == 429:
+                retry_after = r.headers.get("Retry-After")
+                if retry_after > 0:
+                    time.sleep(float(retry_after))
+                else:
+                    time.sleep(2 ** attempt + random.uniform(0,0.25))
+                continue
+            # 500 <= status_code < 600 -> server error
+            elif 500 <= r.status_code < 600:
+                time.sleep(2 ** attempt + random.uniform(0,0.25))
+                continue
+            else:
+                r.raise_for_status()
+                # json 형태로 데이터 받기
+                data = r.json()
+                if data == []:
+                    print("empty dataframe")
+                    return pd.DataFrame(columns=[
+                        "open","high","low","close","volume",
+                        "close_time","quote_volume","trades",
+                        "taker_buy_base","taker_buy_quote"
+                    ])
+                else:
+                    # 데이터프레임 만들기
+                    COLUMNS = [
+                        "open_time", "open", "high", "low", "close", "volume",
+                        "close_time", "quote_volume", "trades", 
+                        "taker_buy_base", "taker_buy_quote", "ignore"
+                    ]
+                    df = pd.DataFrame(data, columns=COLUMNS)
+                    # 필요없는 열 제거
+                    df = df.drop(columns=["ignore"])
+                    # 데이터 타입 변환
+                    NUMERIC_FLOAT = ["open", "high", "low", "close", "volume", "quote_volume", "taker_buy_base", "taker_buy_quote"]
+                    df[NUMERIC_FLOAT] = df[NUMERIC_FLOAT].apply(pd.to_numeric, errors = "coerce")
+                    df["trades"] = pd.to_numeric(df["trades"], errors="coerce").astype("Int64")
+                    # 에포크 밀리초를 타임스템프(UTC)로 변환
+                    df["open_time"]  = pd.to_datetime(df["open_time"], unit="ms", utc=True)
+                    df["close_time"] = pd.to_datetime(df["close_time"], unit="ms", utc=True)
+                    # open_time을 기준으로 정렬
+                    df = df.set_index("open_time").sort_index()
+                    df = df[~df.index.duplicated(keep="last")]
+                    # 결측값 수 파악
+                    na_count = df.isna().sum()
+                    print(f"결측값 수량: {na_count}개.")
+                    # 핵심 열의 결측값 제거
+                    df = df.dropna(subset=["open","high","low","close","volume"])
+                    return df
 
         except requests.exceptions.RequestException as e:
             if attempt >= max_retries:
@@ -91,7 +110,7 @@ def crypto_data_loader(
     interval: str,
     start_time: str | int,
     end_time: str | int,    # "2024-01-01" | epoch ms
-    market: str = "spot",   # spot 기본값, future로 전환 가능
+    market: str = "spot",   # spot 기본값, futures로 전환 가능
     limit: int = None,      # 기본값 = 리미트 없음
     max_retries: int = 3,   # 재시도 횟수
     timeout: float = 10.0,
@@ -104,7 +123,7 @@ def crypto_data_loader(
         Base_URL = "https://fapi.binance.com"
         path = "/fapi/v1/klines"
     else:
-        raise ValueError("{market} is not used keyword. use 'spot' or 'future'")
+        raise ValueError(f"{market!r} is not used keyword. use 'spot' or 'futures'")
     # 파라미터 검증
     # interval이 유효한지(지정된 문자열 중 하나인지)
     ALLOWED = {"1m","3m","5m","15m","30m","1h","2h","4h","6h","8h","12h","1d","3d","1w","1M"}
