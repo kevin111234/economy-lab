@@ -99,8 +99,10 @@ def crypto_data_loader(
     # Base URL 정의
     if market == "spot":
         Base_URL = "https://api.binance.com"
+        path = "/api/v3/klines"
     elif market == "future":
         Base_URL = "https://fapi.binance.com"
+        path = "/fapi/v1/klines"
     else:
         raise ValueError("{market} is not used keyword. use 'spot' or 'future'")
     # 파라미터 검증
@@ -117,9 +119,12 @@ def crypto_data_loader(
     if limit is not None and limit < 1:
         raise ValueError(f"limit can't be less then 1, got '{limit}'")
     # 파라미터 지정
-    params = {"symbol":symbol, "interval":interval, "startTime":st, "endTime":et, "limit":limit}
+    params = {"symbol":symbol, "interval":interval, "startTime":st, "endTime":et}
+    # limit가 none이면 파라미터에 추가 X
+    if limit is not None:
+        params["limit"] = limit
     # requests 통해서 데이터 받아오기
-    result = get_api_data_binance(Base_URL, path="/api/v3/klines",params=params)
+    result = get_api_data_binance(Base_URL, path=path, params=params)
     # 행 개수와 리미트 비교 검증
     # 반환
     return result
