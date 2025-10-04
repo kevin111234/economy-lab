@@ -109,8 +109,8 @@ def get_api_data_binance(base_url: str, path: str, params: dict,
 def crypto_data_loader(
     symbol: str,
     interval: str,
-    start_time: str | int,
-    end_time: str | int,    # "2024-01-01" | epoch ms
+    start_time: str | int = None,
+    end_time: str | int = None,    # "2024-01-01" | epoch ms
     market: str = "spot",   # spot 기본값, futures로 전환 가능
     limit: int = None,      # 기본값 = 리미트 없음
     max_retries: int = 3,   # 재시도 횟수
@@ -131,10 +131,11 @@ def crypto_data_loader(
     if interval not in ALLOWED:
         raise ValueError(f"interval must be one of {sorted(ALLOWED)}, got '{interval}'")
     # 시간 검증
-    st = time_parser(start_time)
-    et = time_parser(end_time)
-    if st > et:
-        raise ValueError(f"start time can't be later then end time. start time:'{start_time}', end time:'{end_time}'")
+    if start_time is not None and end_time is not None:
+        st = time_parser(start_time)
+        et = time_parser(end_time)
+        if st > et:
+            raise ValueError(f"start time can't be later then end time. start time:'{start_time}', end time:'{end_time}'")
     # limit가 1 이상인지
     if limit is not None and limit < 1:
         raise ValueError(f"limit can't be less then 1, got '{limit}'")
