@@ -51,8 +51,9 @@ def get_api_data_binance(base_url: str, path: str, params: dict,
             # status_code == 429 -> 레이트리밋
             if r.status_code == 429:
                 retry_after = r.headers.get("Retry-After")
-                if retry_after > 0:
-                    time.sleep(float(retry_after))
+                if type(retry_after) == int:
+                    if retry_after > 0:
+                        time.sleep(float(retry_after))
                 else:
                     time.sleep(2 ** attempt + random.uniform(0,0.25))
                 continue
