@@ -94,7 +94,6 @@ def get_api_data_binance(base_url: str, path: str, params: dict,
                     df = df[~df.index.duplicated(keep="last")]
                     # 결측값 수 파악
                     na_count = df.isna().sum()
-                    print(f"결측값 수량: {na_count}개.")
                     # 핵심 열의 결측값 제거
                     df = df.dropna(subset=["open","high","low","close","volume"])
                     return df
@@ -116,11 +115,22 @@ def crypto_data_loader(
     max_retries: int = 3,   # 재시도 횟수
     timeout: float = 10.0,
 ) -> pd.DataFrame:
+    """
+    암호화폐 데이터를 불러와 데이터프레임으로 반환\
+    파라미터 입력:\
+    symbol: 암호화폐 심볼 (예: BTCUSDT)\
+    interval: 1m~1M까지 중 선택\
+    start_time, end_time: 데이터를 불러올 기간(기간, 개수 중 택1)\
+    limit: 불러올 데이터의 개수(기간, 개수 중 택1)\
+    market: 현물 시장, 선물 시장(spot, futures)\
+    max_retries: 재시도 횟수(api 에러 시)\
+    timeout: api 접속 타임아웃
+    """
     # Base URL 정의
     if market == "spot":
         Base_URL = "https://api.binance.com"
         path = "/api/v3/klines"
-    elif market == "future":
+    elif market == "futures":
         Base_URL = "https://fapi.binance.com"
         path = "/fapi/v1/klines"
     else:
