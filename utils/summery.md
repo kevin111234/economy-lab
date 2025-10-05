@@ -10,11 +10,22 @@ from src.utils.logging_config import setup_logging
 
 setup_logging(
     log_path="logs/app.log",   # None이면 파일 저장 안 함(콘솔만)
-    level="INFO",              # 개발 중엔 "DEBUG"
+    level="INFO",              # 개발 중엔 "DEBUG", 서비스 운영 중엔 "INFO"
     json_format=False,         # 프로덕션 수집/분석은 True
     rotate=True,               # 로그 파일 회전 활성화
 )
 ```
+level 설정 가이드
+| 로그 레벨 | 설명               |
+| -------- | ---------------- |
+| DEBUG    | 세부 디버깅용     |
+| INFO     | 일반 진행 상황         |
+| WARNING  | 경고, 잠재적 문제       |
+| ERROR    | 예외, 실패, 오류       |
+| CRITICAL | 심각한 오류, 즉시 조치 필요 |
+
+- DEBUG로 설정하면 모든 로그 출력,
+- INFO로 설정하면 DEBUG를 제외한 모든 로그 출력
 
 > ✅ 반드시 한 번만 호출
 > (테스트 중 여러 번 바꿔야 한다면 `force_reconfigure=True` 옵션을 추가)
