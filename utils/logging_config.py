@@ -114,11 +114,20 @@ class KeyValueFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         base = super().format(record)
         ctx = getattr(record, "ctx", None)
-        if isinstance(ctx, dict) and ctx:
-            tail = " ".join(f"{k}={v}" for k, v in ctx.items())
-            return f"{base} | {tail}"
-        return base
 
+        if not (isinstance(ctx, dict) and ctx):
+            return base
+
+        # 스택트레이스가 포함된 경우 base는 여러 줄입니다.
+        lines = base.splitlines()
+        head = lines[0]
+        tail = lines[1:]
+
+        # 첫 줄에만 ctx를 key=value로 부착
+        kv = " ".join(f"{k}={v}" for k, v in ctx.items())
+        head_with_ctx = f"{head} | {kv}"
+
+        return "\n".join([head_with_ctx, *tail]) if tail else head_with_ctx
 
 class JSONFormatter(logging.Formatter):
     """
@@ -200,10 +209,13 @@ def setup_logging(
     root.propagate = propagate_root  # 일반적으로 False: 상위 로거로 중복 전파 방지
 
     # 포맷터 선택(텍스트 / JSON)
-    formatter: logging.Formatter = (
-        JSONFormatter() if json_format
-        else KeyValueFormatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
-    )
+    if json_format:
+        formatter = JSONFormatter()  # ← JSON 라인 포맷
+    else:
+        formatter = KeyValueFormatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+        # 텍스트일 때만 ISO8601 포맷 지정
+        formatter.default_time_format = "%Y-%m-%dT%H:%M:%S"
+        formatter.default_msec_format = "%s.%03d"
 
     # 콘솔 핸들러
     sh = logging.StreamHandler()
