@@ -113,7 +113,7 @@ def get_api_data_binance(base_url: str, path: str, params: dict,
                 log.error("json_parse_error", exc_info=True, extra={"url": url})
                 raise RuntimeError(f"JSON 파싱 실패: {e}")
 
-def pagination(Base_URL, path, symbol, interval, st, et, limit):
+def pagination_crypto(Base_URL, path, symbol, interval, st, et, limit):
     # limit 숫자 지정
     if limit is None:
         limit = 1000
@@ -290,7 +290,7 @@ def crypto_data_loader(
         "symbol": symbol, "interval": interval, "market": market,
         "st": st, "et": et, "limit": limit or 1000
     })
-    result = pagination(Base_URL=Base_URL, path=path, symbol=symbol, interval=interval, st=st, et=et, limit=limit)
+    result = pagination_crypto(Base_URL=Base_URL, path=path, symbol=symbol, interval=interval, st=st, et=et, limit=limit)
     # 페이지네이션 이후 로깅
     log.info("load_done", extra={"rows": len(result), "first": str(result.index[:1]), "last": str(result.index[-1:])})
     # 반환
