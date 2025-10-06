@@ -29,6 +29,9 @@ def get_api_data_FRED(series_id: str, start: str, end: str, api_key: str,
         "sort_order": "asc"
     }
     all_obs = []
+    # 파라미터 검증
+    if not api_key:
+        raise ValueError("FRED API key is required. Set it via environment variable.")
     # 데이터 수집 루프 (페이지네이션 적용)
     while True:
         for attempt in range(max_retries):
@@ -76,8 +79,8 @@ def get_api_data_FRED(series_id: str, start: str, end: str, api_key: str,
         r.raise_for_status()
         # json 형태로 데이터 받기
         data = r.json()
-        # 데이터 중 필요한 부분 추출
-        obs = data["observations"]
+        # 데이터 중 필요한 부분 추출(안전성 강화)
+        obs = data.get("observations", [])
         all_obs.extend(obs)
         # 데이터가 없는 경우 처리
         if not obs:
@@ -95,11 +98,16 @@ def get_api_data_FRED(series_id: str, start: str, end: str, api_key: str,
     df["date"] = pd.to_datetime(df["date"])  # naive UTC
     # 인덱스 열 설정
     df = df.set_index("date").sort_index()
+    # 결측값 체크
+    na_count = df.isna().sum().iloc[0]
+    if na_count > 0:
+        log.warning("fred_missing_values", extra={"na_rows": int(na_count), "total": len(df)})
     # 타임존 변환
+    # FRED date는 'YYYY-MM-DD' 문자열이므로, KST 자정으로 로컬라이즈
     df.index = df.index.tz_localize("Asia/Seoul")
     # 데이터 수집 성공 시 로깅
     log.info("fred_load_done", extra={"rows": len(df), 
-                                      "pages": params["offset"]//limit + 1})
+                                      "pages": max(1, params["offset"] // limit + 1)})
     return df[["value"]].rename(columns={"value": series_id})
 
 # 원/달러 환율 불러오기(FRED api)
