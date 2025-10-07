@@ -1,5 +1,5 @@
 from datetime import date, timedelta
-from data_load.exchange_official import get_api_data_FRED
+from data_load.exchange_official import get_api_data_FRED, FRED_exchange_data_loader
 from pathlib import Path
 from utils.api_utils import load_env, get_required
 
@@ -10,10 +10,10 @@ API_KEY = get_required("FRED_API_KEY")
 
 def main():
     assert API_KEY, "환경변수 FRED_API_KEY 가 필요합니다."
-    start = "2024-10-01"
+    start = "2024-10-01 15:36"
     end   = (date.today() - timedelta(days=2)).isoformat()
-    df = get_api_data_FRED("DEXKOUS", start, end, API_KEY)
-    print(df.tail())
+    df = FRED_exchange_data_loader(start=start, end=end, api_key=API_KEY)
+    print(df)
 
 if __name__ == "__main__":
     main()
