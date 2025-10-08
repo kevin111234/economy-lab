@@ -112,6 +112,8 @@ def get_api_data_FRED(series_id: str, start: str, end: str, api_key: str,
 
 # 원/달러 환율 불러오기(FRED api)
 def FRED_exchange_data_loader(
+        series_id: str,
+        column_name: str,
         start: str | int,
         end: str | int,
         *,
@@ -144,7 +146,7 @@ def FRED_exchange_data_loader(
     et_kst_date = datetime.fromtimestamp(et/1000, tz=timezone.utc).astimezone(KST).date().isoformat()
 
     df_raw = get_api_data_FRED(
-        series_id="DEXKOUS",
+        series_id=series_id,
         start=st_kst_date,           # ← 문자열 'YYYY-MM-DD'
         end=et_kst_date,             # ← 문자열 'YYYY-MM-DD'
         api_key=api_key,
@@ -152,23 +154,17 @@ def FRED_exchange_data_loader(
         max_retries=max_retries
     )
     # 스키마 표준화
-    df = df_raw.rename(columns={"DEXKOUS": "KRW_per_USD"})
+    df = df_raw.rename(columns={series_id : column_name})
     df["source"] = "fred"
     # 데이터 수집 완료 로깅
-    return df[["KRW_per_USD", "source"]]
-
-# 달러인덱스 불러오기(FRED api)
-def FRED_dollar_index_data_loader():
-    # 파라미터 검증
-    # 데이터 수집 시작 로깅
-    # 페이지네이션
-    # 데이터 수집 완료 로깅
-    return
+    return df[[column_name, "source"]]
 
 # 달러인덱스에 따른 원화인덱스 데이터 계산
-def won_index_data_calculator(exchange_df, dollar_index_df):
-    # 파라미터 검증
-    # 데이터 계산식 적용
-    # 데이터 계산 완료 로깅
-    # 3가지 데이터 병합 후 반환
+def won_index_data_calculator(start: int | str, end: int | str):
+    # 빈 데이터프레임 생성
+    # 원 달러 환율 데이터 불러오기
+    # 달러인덱스 불러오기
+    # 기타 환율 불러오기
+    # 공식에 따른 계산
+    # 데이터프레임 병합 및 필요없는 데이터 삭제
     return
