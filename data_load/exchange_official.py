@@ -2,6 +2,7 @@ import pandas as pd
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import requests, time, random
+import numpy as np
 
 # --- logging utils ---
 from utils.logging_config import get_logger, setup_logging
@@ -160,35 +161,120 @@ def FRED_exchange_data_loader(
 
 # 달러인덱스에 따른 원화인덱스 데이터 계산
 def won_index_data_calculator(start: int | str, end: int | str, api_key):
-    # 빈 데이터프레임 생성
-    result = pd.DataFrame
+    # ---------------------------
+    # 0) 준비
+    # ---------------------------
+    result = pd.DataFrame()
     dfs = []
-    # 각국 환율 불러오기
+
     sid = {
-        "KRWUSD": "DEXKOUS",
-        "EURUSD": "DEXUSEU",
-        "USDJPY": "DEXJPUS",
-        "GBPUSD": "DEXUSUK",
-        "USDCAD": "DEXCAUS",
-        "USDSEK": "DEXSDUS",
-        "USDCHF": "DEXSZUS",
+        "KRWUSD": "DEXKOUS",   # 1 USD = ? KRW
+        "EURUSD": "DEXUSEU",   # USD/EUR → 역수 필요
+        "USDJPY": "DEXJPUS",   # 1 USD = ? JPY
+        "GBPUSD": "DEXUSUK",   # USD/GBP → 역수 필요
+        "USDCAD": "DEXCAUS",   # 1 USD = ? CAD
+        "USDSEK": "DEXSDUS",   # 1 USD = ? SEK
+        "USDCHF": "DEXSZUS",   # 1 USD = ? CHF
+        "DXY": "DTWEXBGS"      # Broad Dollar Index (2006=100)
     }
+
+    # ---------------------------
+    # 1) 데이터 수집
+    # ---------------------------
     for col_name, series_id in sid.items():
-        df_i =FRED_exchange_data_loader(series_id = series_id, 
-                                        column_name = col_name, 
-                                        start = start, end = end, 
-                                        api_key = api_key
-                                        )
+        df_i = FRED_exchange_data_loader(
+            series_id=series_id,
+            column_name=col_name,
+            start=start,
+            end=end,
+            api_key=api_key
+        )
         if isinstance(df_i, pd.DataFrame) and not df_i.empty:
             dfs.append(df_i[[col_name]])
+
     if dfs:
         result = pd.concat(dfs, axis=1, join="outer").sort_index()
         result = result[~result.index.duplicated(keep="last")]
     else:
         return pd.DataFrame()
-    # 역수 계산이 필요한 환율 재계산
-    # 공식에 따른 인덱스 계산
-    # 달러 인덱스 계산
-    # 원화 인덱스 계산
-    # 데이터프레임 병합 및 필요없는 데이터 삭제
-    return 
+
+    # ---------------------------
+    # 2) 환율 방향 보정
+    # ---------------------------
+    # FRED의 DEXUSEU(EUR/USD), DEXUSUK(GBP/USD)는 USD 기준이 아니라 반대방향이므로 역수 필요
+    invert_cols = ["EURUSD", "GBPUSD"]
+    for c in invert_cols:
+        if c in result.columns:
+            result[c] = 1.0 / result[c]
+
+    # ---------------------------
+    # 3) 데이터 정리 (숫자형 변환)
+    # ---------------------------
+    for c in result.columns:
+        result[c] = pd.to_numeric(result[c], errors="coerce")
+    result = result.replace([np.inf, -np.inf], np.nan)
+
+    # ---------------------------
+    # 4) 달러 인덱스 단순 리베이스
+    # ---------------------------
+    # DXY(=DTWEXBGS)는 2006=100 기준이므로 최근값이 120 근처 → 100 부근으로 맞춰주기 위해 리베이스
+    if "DXY" in result.columns:
+        # 최근 2년 평균을 100으로 맞추는 간단한 리베이스 예시
+        recent = result["DXY"].dropna().tail(520)  # 약 2년치
+        if not recent.empty:
+            scale = 100.0 / recent.mean()
+            result["DXY_rebased"] = result["DXY"] * scale
+        else:
+            result["DXY_rebased"] = result["DXY"]
+
+    # ---------------------------
+    # 5) 원화 인덱스 계산 (단순 정규화형)
+    # ---------------------------
+    if "KRWUSD" in result.columns:
+        base_idx = result["KRWUSD"].dropna().index.min()
+        if pd.notna(base_idx):
+            base_val = result.at[base_idx, "KRWUSD"]
+            result["KRW_INDEX"] = 100.0 * (base_val / result["KRWUSD"])
+
+    # ---------------------------
+    # 6) 원화 인덱스 (달러 절대강약 감안형)
+    # ---------------------------
+    if {"KRWUSD", "DXY_rebased"}.issubset(result.columns):
+        df_reg = result[["KRWUSD", "DXY_rebased"]].dropna().copy()
+        if len(df_reg) > 30:
+            x = np.log(df_reg["DXY_rebased"].values)
+            y = np.log(df_reg["KRWUSD"].values)
+            beta = np.cov(x, y, ddof=1)[0, 1] / np.var(x, ddof=1)
+            alpha = y.mean() - beta * x.mean()
+            p_hat = np.exp(alpha + beta * np.log(result["DXY_rebased"]))
+            result["KRW_STRENGTH"] = 100.0 * (p_hat / result["KRWUSD"])
+
+    # β 추정 (선택: 없으면 1.0)
+    df_reg = result[["KRWUSD", "DXY_rebased"]].dropna().copy()
+    if len(df_reg) >= 60:  # 최소 샘플 보장
+        x = np.log(df_reg["DXY_rebased"].values)   # 중립=100 기준이므로 100 부근
+        y = np.log(df_reg["KRWUSD"].values)
+        beta = np.cov(x, y, ddof=1)[0, 1] / np.var(x, ddof=1)
+    else:
+        beta = 1.0  # 보수적 기본값
+
+    # USD-중립 조정 환율: P_adj = P / (U/100)^β
+    P = result["KRWUSD"]
+    U = result["DXY_rebased"]
+    result["P_ADJ"] = P / np.power(U / 100.0, beta)
+
+    # 베이스 선택: 첫 유효일(또는 최근 252거래일 중앙값 등으로 바꿔도 됨)
+    base_idx = result["P_ADJ"].dropna().index.min()
+    if pd.notna(base_idx):
+        base_val = result.at[base_idx, "P_ADJ"]
+        result["KRW_STRENGTH_NEUTRAL"] = 100.0 * (base_val / result["P_ADJ"])
+
+    # ---------------------------
+    # 7) 정리 후 반환
+    # ---------------------------
+    keep_cols = [
+        "KRWUSD", "DXY_rebased", "KRW_STRENGTH"
+    ]
+    keep_cols = [c for c in keep_cols if c in result.columns]
+    result = result[keep_cols]
+    return result
