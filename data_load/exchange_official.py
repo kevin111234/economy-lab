@@ -155,16 +155,40 @@ def FRED_exchange_data_loader(
     )
     # 스키마 표준화
     df = df_raw.rename(columns={series_id : column_name})
-    df["source"] = "fred"
     # 데이터 수집 완료 로깅
-    return df[[column_name, "source"]]
+    return df[[column_name]]
 
 # 달러인덱스에 따른 원화인덱스 데이터 계산
-def won_index_data_calculator(start: int | str, end: int | str):
+def won_index_data_calculator(start: int | str, end: int | str, api_key):
     # 빈 데이터프레임 생성
-    # 원 달러 환율 데이터 불러오기
-    # 달러인덱스 불러오기
-    # 기타 환율 불러오기
-    # 공식에 따른 계산
+    result = pd.DataFrame
+    dfs = []
+    # 각국 환율 불러오기
+    sid = {
+        "KRWUSD": "DEXKOUS",
+        "EURUSD": "DEXUSEU",
+        "USDJPY": "DEXJPUS",
+        "GBPUSD": "DEXUSUK",
+        "USDCAD": "DEXCAUS",
+        "USDSEK": "DEXSDUS",
+        "USDCHF": "DEXSZUS",
+    }
+    for col_name, series_id in sid.items():
+        df_i =FRED_exchange_data_loader(series_id = series_id, 
+                                        column_name = col_name, 
+                                        start = start, end = end, 
+                                        api_key = api_key
+                                        )
+        if isinstance(df_i, pd.DataFrame) and not df_i.empty:
+            dfs.append(df_i[[col_name]])
+    if dfs:
+        result = pd.concat(dfs, axis=1, join="outer").sort_index()
+        result = result[~result.index.duplicated(keep="last")]
+    else:
+        return pd.DataFrame()
+    # 역수 계산이 필요한 환율 재계산
+    # 공식에 따른 인덱스 계산
+    # 달러 인덱스 계산
+    # 원화 인덱스 계산
     # 데이터프레임 병합 및 필요없는 데이터 삭제
-    return
+    return 
