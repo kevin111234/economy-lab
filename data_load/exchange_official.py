@@ -99,10 +99,30 @@ def get_api_data_FRED(series_id: str, start: str, end: str, api_key: str,
     df["date"] = pd.to_datetime(df["date"])  # naive UTC
     # 인덱스 열 설정
     df = df.set_index("date").sort_index()
-    # 결측값 체크
-    na_count = df.isna().sum().iloc[0]
+    # 결측 카운트 계산 (value 컬럼 기준)
+    if "value" in df.columns:
+        na_count = df["value"].isna().sum()
+    else:
+        na_count = df.isna().sum().sum()  # 예상치 못한 구조일 때 fallback
+
     if na_count > 0:
-        log.warning("fred_missing_values", extra={"na_rows": int(na_count), "total": len(df)})
+        log.warning("fred_missing_values_before_ffill",
+                    extra={"na_rows": int(na_count), "total": int(len(df))}
+        )
+        # ffill 시도
+        if "value" in df.columns:
+            df["value"] = df["value"].ffill()
+        else:
+            df = df.ffill()
+        # 여전히 첫 부분에 NaN 남아있으면 제거
+        if "value" in df.columns:
+            still_na = df["value"].isna().sum()
+            if still_na > 0:
+                log.warning(
+                    "fred_missing_values_head_drop",
+                    extra={"still_na_rows": int(still_na)}
+                )
+                df = df.dropna(subset=["value"])
     # 타임존 변환
     # FRED date는 'YYYY-MM-DD' 문자열이므로, KST 자정으로 로컬라이즈
     df.index = df.index.tz_localize("Asia/Seoul")
